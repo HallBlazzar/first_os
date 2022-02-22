@@ -1,0 +1,83 @@
+ORG 0
+BITS 16 ; 16 bit mode
+
+; first 3 bytes are meaningful. They will indicate where to start execute
+_bios_parameter:
+    jmp short _set_code_segment
+    nop
+
+    ; fill other parameters with value 0
+    times 33 db 0
+
+_set_code_segment:
+    jmp 0x7c0:start ; set code segment with 0x7c0, and set instruction pointer(ip) with address of "start"
+
+; video teletype output - http://www.ctyme.com/intr/rb-0106.htm
+; configure all register to the register required on the page
+start:
+
+    ; Clear interrupt. It will disable interrupt. It make sure segment initialization progress won't be interrupted and cause unexpected result
+    cli
+
+    ; cannot directly assign value to ds and es, so we need to copy from ax
+    mov ax, 0x7c0
+    mov ds, ax ; data segment
+    mov es, ax ; extra segment
+
+    ; initialize stack segment. Note stack memory address decrease when pushing value to it(SP).
+    mov ax, 0x00
+    mov ss, ax ; set stack segment 0
+    mov sp, 0x7c00 ; set stack pointer to our target offset
+
+    ; Enable interrupt
+    sti
+
+    ; Read from disk(0x13) based on CHS
+    ; http://www.ctyme.com/intr/rb-0607.htm
+    ; https://wiki.osdev.org/Disk_access_using_the_BIOS_(INT_13h)
+    ; in general, DL will be set by bios when it specifies the disk
+    mov ah, 2 ; read sector command
+    mov al, 1 ; read 1 sector
+    mov ch, 0 ; cylinder low eight bits
+    mov cl, 2 ; read sector 2
+    mov dh, 0 ; head number
+    mov bx, buffer ; data buffer location. es:bx. ES has already been 0x7c0.
+    int 0x13
+
+    jc error ; jump to error handling if CF is set
+
+    mov si, buffer
+    call print
+
+    jmp $ ; "$" stands for the current instruction. So it will lead infinitely loop there in runtime
+
+error:
+    mov si, error_message
+    call print
+    jmp $
+
+print:
+.loop:
+    lodsb ; load byte at the address SI register stores into AL register, the move address SI stores to next byte
+    cmp al, 0 ; compare content in al and 0 -> check end of string reached
+    je .done ; je jumps to a label if the previous comparison was equal.
+    call print_char
+    jmp .loop
+.done: ; "." indicates sub-label
+    ret
+
+print_char:
+    mov ah, 0eh
+    int 0x10 ; trigger interrupt
+    ret ; return
+
+error_message: db 'Failed to load sector'
+
+; for first 510 byte data excluding the part already have data ('start' section),
+; fill rest of them with '0'
+times 510-($ - $$) db 0
+
+; add signature required by bios on 511 and 512 byte
+dw 0xAA55 ; 511-> AA, 512 -> 55
+
+buffer: ; contents loaded after there will be have the label, buffer
