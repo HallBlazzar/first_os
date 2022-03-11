@@ -5,7 +5,7 @@ void encode_gdt_entry(uint8_t* target, struct structured_gdt source);
 
 void convert_structured_gdt_to_gdt(struct gdt* gdt, struct structured_gdt* structured_gdt, int total_entries) {
     for (int i = 0; i < total_entries; i++) {
-        encode_gdt_entry((uint8_t*)&gdt[i], *structured_gdt); // convert structured gdt to normal gdt
+        encode_gdt_entry((uint8_t*)&gdt[i], structured_gdt[i]); // convert structured gdt to normal gdt
     }
 }
 
